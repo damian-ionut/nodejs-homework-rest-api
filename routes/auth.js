@@ -1,12 +1,22 @@
 const express = require('express');
-const { signup, login, logout, current, updateSubscription } = require('../controllers/auth');
-const authMiddleware = require('../middlewares/auth');
 const router = express.Router();
+const { signup, login, updateAvatar } = require('../controllers/auth');
+const multer = require('multer');
+const path = require('path');
+
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'tmp');
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${req.user._id}-${Date.now()}${path.extname(file.originalname)}`);
+  },
+});
+
+const upload = multer({ storage: avatarStorage });
 
 router.post('/signup', signup);
 router.post('/login', login);
-router.get('/logout', authMiddleware, logout);
-router.get('/current', authMiddleware, current);
-router.patch('/', authMiddleware, updateSubscription);
+router.patch('/avatar', upload.single('avatar'), updateAvatar); 
 
 module.exports = router;
