@@ -4,15 +4,15 @@ const { Schema } = mongoose;
 const contactSchema = new Schema({
   name: {
     type: String,
-    required: true,
+    required: [true, 'Name is required'],
   },
   email: {
     type: String,
-    required: true,
+    required: [true, 'Email is required'],
   },
   phone: {
     type: String,
-    required: true,
+    required: [true, 'Phone number is required'],
   },
   favorite: {
     type: Boolean,
@@ -20,10 +20,9 @@ const contactSchema = new Schema({
   },
   owner: {
     type: Schema.Types.ObjectId,
-    ref: 'user',
+    ref: 'User',
+    required: true,
   },
 });
 
-const Contact = mongoose.model('contact', contactSchema);
-
-module.exports = Contact;
+module.exports = mongoose.model('Contact', contactSchema);
