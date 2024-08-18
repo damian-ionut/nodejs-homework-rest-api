@@ -1,11 +1,11 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const gravatar = require('gravatar');
-const Jimp = require('jimp');
-const User = require('../models/user');
+const { v4: uuidv4 } = require('uuid');
 const Joi = require('joi');
-const path = require('path');
+const User = require('../models/user');
+const sendEmail = require('../helpers/sendEmail');
 const fs = require('fs');
+const path = require('path');
 
 const userSchema = Joi.object({
   email: Joi.string().email().required(),
@@ -23,54 +23,77 @@ exports.signup = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const avatarURL = gravatar.url(email, { s: '250', r: 'x', d: 'retro' });
-    const user = new User({ email, password: hashedPassword, avatarURL });
+    const userId = uuidv4();
+    const avatarDir = path.join(__dirname, '../public/avatars', userId);
+    const originalAvatarPath = path.join(__dirname, '../public/avatar.jpg');
+    const newAvatarPath = path.join(avatarDir, 'avatar.jpg');
+
+    fs.mkdirSync(avatarDir, { recursive: true });
+    fs.copyFileSync(originalAvatarPath, newAvatarPath);
+
+    const avatarURL = `${req.protocol}://${req.get('host')}/avatars/${userId}/avatar.jpg`;
+    const verificationToken = uuidv4();
+
+    const user = new User({ email, password: hashedPassword, avatarURL, verificationToken });
     await user.save();
 
-    res.status(201).json({ user: { email: user.email, subscription: user.subscription, avatarURL: user.avatarURL } });
+    const verificationLink = `${req.protocol}://${req.get('host')}/auth/verify/${verificationToken}`;
+    await sendEmail(email, 'Please verify your email', `<a href="${verificationLink}">Verify your email</a>`);
+
+    res.status(201).json({ message: 'Signup successful! Please check your email to verify your account.' });
   } catch (error) {
     res.status(400).json(error.details ? error.details[0] : { message: error.message });
   }
 };
 
-exports.login = async (req, res) => {
+exports.verifyEmail = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const { verificationToken } = req.params;
+    const user = await User.findOne({ verificationToken });
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    user.verify = true;
+    user.verificationToken = null;
+    await user.save();
 
-    res.status(200).json({ token, user: { email: user.email, subscription: user.subscription, avatarURL: user.avatarURL } });
+    res.status(200).json({ message: 'Verification successful' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.resendVerificationEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Missing required field email' });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.verify) {
+      return res.status(400).json({ message: 'Verification has already been passed' });
+    }
+
+    const verificationLink = `${req.protocol}://${req.get('host')}/auth/verify/${user.verificationToken}`;
+    await sendEmail(email, 'Please verify your email', `<a href="${verificationLink}">Verify your email</a>`);
+
+    res.status(200).json({ message: 'Verification email sent' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
 exports.updateAvatar = async (req, res) => {
-  try {
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
+};
 
-    const avatarPath = path.join('tmp', file.filename);
-    const processedAvatar = await Jimp.read(avatarPath);
-    await processedAvatar.resize(250, 250).writeAsync(avatarPath);
-
-    const newAvatarName = `${req.user._id}-${Date.now()}${path.extname(file.originalname)}`;
-    const newAvatarPath = path.join('public/avatars', newAvatarName);
-    fs.renameSync(avatarPath, newAvatarPath);
-
-    const avatarURL = `/avatars/${newAvatarName}`;
-    req.user.avatarURL = avatarURL;
-    await req.user.save();
-
-    res.status(200).json({ avatarURL });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+exports.login = async (req, res) => {
 };
