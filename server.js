@@ -5,13 +5,16 @@ const path = require('path');
 
 dotenv.config();
 
-const authRouter = require('./routes/auth'); 
+const authRouter = require('./routes/auth');
+const contactsRouter = require('./routes/contacts'); 
+
 const app = express();
 
-app.use(express.json()); 
-app.use('/avatars', express.static(path.join(__dirname, 'public/avatars'))); 
+app.use(express.json());
+app.use('/avatars', express.static(path.join(__dirname, 'public/avatars')));
 
-app.use('/auth', authRouter); 
+app.use('/auth', authRouter);
+app.use('/api/contacts', contactsRouter); 
 
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
